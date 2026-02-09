@@ -17,18 +17,19 @@ if missing:
     print("Missing environment variables:", missing)
     sys.exit(1)
 
-# Import your main bot module (must be in repo root)
+# Import your main bot module
 import betting_boyz_real_final_verified_FULL_PATCHED as bot
 
+
 if _name_ == "_main_":
-    # ✅ timezone-aware UTC (fixes utcnow deprecation warning)
+    # timezone-aware UTC (no deprecation warnings)
     print("Betting Boyz Runner Started", datetime.now(timezone.utc).isoformat())
 
-    # ✅ IMPORTANT: provide ALL args your bot expects, including "slot"
+    # Provide all expected arguments
     args = bot.argparse.Namespace(
         refresh_sports=False,
         self_test=False,
-        slot=None,  # auto: morning before cutoff, afternoon after cutoff
+        slot=None,  # auto morning / afternoon logic
     )
 
     bot.main(args)
