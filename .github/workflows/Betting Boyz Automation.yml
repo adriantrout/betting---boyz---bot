@@ -2,7 +2,9 @@ name: Betting Boyz Automation
 
 on:
   schedule:
-    - cron: "0 6,14 * * *"
+    # 08:00 and 15:00 South Africa (SAST = UTC+2) => 06:00 and 13:00 UTC
+    - cron: "0 6 * * *"
+    - cron: "0 13 * * *"
   workflow_dispatch:
 
 jobs:
@@ -22,3 +24,4 @@ jobs:
           TO_WHATSAPP_NUMBER: ${{ secrets.TO_WHATSAPP_NUMBER }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           WHATSAPP_CHANNEL_LINK: ${{ secrets.WHATSAPP_CHANNEL_LINK }}
+          TZ_NAME: Africa/Johannesburg
