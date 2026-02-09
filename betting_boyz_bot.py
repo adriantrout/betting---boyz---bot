@@ -78,6 +78,9 @@ MAX_DECIMAL_ODDS = 10.0
 # Timezone lock
 TZ_NAME = os.getenv("TZ_NAME", "Africa/Johannesburg")
 
+# Limit how many leagues we query (prevents quota/rate-limit issues)
+MAX_SPORTS = int(os.getenv("MAX_SPORTS", "25"))
+
 # Sending toggle (useful for testing in Actions)
 SEND_ENABLED = os.getenv("SEND_ENABLED", "1") != "0"
 
@@ -167,10 +170,20 @@ def load_all_soccer_sports_from_file() -> List[str]:
     keys: List[str] = []
     if isinstance(data, list):
         for item in data:
-            k = (item or {}).get("key")
-            if isinstance(k, str) and k.startswith("soccer"):
+            it = item or {}
+            k = it.get("key")
+            active = it.get("active", True)
+            if isinstance(k, str) and k.startswith("soccer") and active:
                 keys.append(k)
-    return keys
+    # Deduplicate, keep order
+    seen = set()
+    out: List[str] = []
+    for k in keys:
+        if k not in seen:
+            seen.add(k)
+            out.append(k)
+    return out[:MAX_SPORTS] if MAX_SPORTS > 0 else out
+
 
 
 # ------------------------------
@@ -206,10 +219,14 @@ def _fetch_odds_for_sport(sport: str, markets: str) -> Optional[List[Dict[str, A
     try:
         response = requests.get(url, timeout=25)
     except Exception as e:
-        append_debug_log(f"Network error fetching {sport} markets={markets}: {e}")
+        msg = f"Network error fetching {sport} markets={markets}: {e}"
+        print(msg)
+        append_debug_log(msg)
         return None
     if response.status_code != 200:
-        append_debug_log(f"Failed to fetch {sport} markets={markets}: {response.status_code} {response.text[:200]}")
+        msg = f"Failed to fetch {sport} markets={markets}: {response.status_code} {response.text[:200]}"
+        print(msg)
+        append_debug_log(msg)
         return None
     try:
         return response.json()
@@ -230,6 +247,7 @@ def fetch_real_matches(sports_list: List[str]) -> List[Dict[str, Any]]:
         # Fallback: if bookmaker coverage is very low, try h2h-only (often has better coverage)
         with_bm = sum(1 for g in data if (g.get("bookmakers") or []))
         if len(data) > 0 and with_bm == 0:
+            print(f"No bookmakers for {sport} with full markets; retrying h2h-only.")
             append_debug_log(f"No bookmakers for {sport} with full markets; retrying h2h-only.")
             data2 = _fetch_odds_for_sport(sport, markets="h2h")
             if data2 is not None:
@@ -906,6 +924,10 @@ def main(args: argparse.Namespace) -> None:
         # Fallback if file missing/empty
         SPORTS = ["soccer_epl", "soccer_spain_la_liga", "soccer_italy_serie_a"]
         append_debug_log(f"Using fallback sports list: {len(SPORTS)}")
+
+    print(f"Sports loaded: {len(SPORTS)} (MAX_SPORTS={MAX_SPORTS})")
+    print("Sports sample:", SPORTS[:10])
+    append_debug_log(f"Sports loaded: {len(SPORTS)} (MAX_SPORTS={MAX_SPORTS})")
 
     if args.self_test:
         _self_test()
