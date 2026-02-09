@@ -21,7 +21,7 @@ if missing:
 import betting_boyz_real_final_verified_FULL_PATCHED as bot
 
 
-if _name_ == "__main__":
+if __name__== "__main__":
     # timezone-aware UTC (no deprecation warnings)
     print("Betting Boyz Runner Started", datetime.now(timezone.utc).isoformat())
 
