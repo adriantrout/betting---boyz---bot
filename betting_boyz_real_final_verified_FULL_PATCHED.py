@@ -63,7 +63,7 @@ MORNING_CUTOFF_HOUR = 12
 MARKET_WEIGHT = {"h2h": 1.00, "totals": 0.95, "spreads": 0.90}
 
 # Odds guardrail
-MAX_DECIMAL_ODDS = 10.0
+MAX_DECIMAL_ODDS = 4.0
 
 
 # ------------------------------
