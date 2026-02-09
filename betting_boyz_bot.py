@@ -193,29 +193,48 @@ def _parse_commence_time(s: Optional[str]) -> Optional[datetime]:
 # ------------------------------
 # Fetch matches + bookmakers/markets
 # ------------------------------
+
+def _fetch_odds_for_sport(sport: str, markets: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    Fetch odds payload for a sport. Returns list of games or None on hard failure.
+    Uses wide regions for better bookmaker coverage.
+    """
+    url = (
+        f"{ODDS_API_URL}/{sport}/odds/"
+        f"?apiKey={ODDS_API_KEY}&regions=eu,uk,us,au&markets={markets}&oddsFormat=decimal"
+    )
+    try:
+        response = requests.get(url, timeout=25)
+    except Exception as e:
+        append_debug_log(f"Network error fetching {sport} markets={markets}: {e}")
+        return None
+    if response.status_code != 200:
+        append_debug_log(f"Failed to fetch {sport} markets={markets}: {response.status_code} {response.text[:200]}")
+        return None
+    try:
+        return response.json()
+    except Exception as e:
+        append_debug_log(f"Failed to parse JSON for {sport} markets={markets}: {e}")
+        return None
+
+
 def fetch_real_matches(sports_list: List[str]) -> List[Dict[str, Any]]:
     matches: List[Dict[str, Any]] = []
 
     for sport in sports_list:
-        url = (
-            f"{ODDS_API_URL}/{sport}/odds/"
-            f"?apiKey={ODDS_API_KEY}&regions=uk,eu&markets=h2h,spreads,totals&oddsFormat=decimal"
-        )
-        try:
-            response = requests.get(url, timeout=25)
-        except Exception as e:
-            append_debug_log(f"Network error fetching {sport}: {e}")
+        # First attempt: full markets (h2h, totals, spreads)
+        data = _fetch_odds_for_sport(sport, markets="h2h,spreads,totals")
+        if data is None:
             continue
 
-        if response.status_code != 200:
-            append_debug_log(f"Failed to fetch {sport}: {response.status_code} {response.text[:200]}")
-            continue
+        # Fallback: if bookmaker coverage is very low, try h2h-only (often has better coverage)
+        with_bm = sum(1 for g in data if (g.get("bookmakers") or []))
+        if len(data) > 0 and with_bm == 0:
+            append_debug_log(f"No bookmakers for {sport} with full markets; retrying h2h-only.")
+            data2 = _fetch_odds_for_sport(sport, markets="h2h")
+            if data2 is not None:
+                data = data2
 
-        try:
-            data = response.json()
-        except Exception as e:
-            append_debug_log(f"Failed to parse JSON for {sport}: {e}")
-            continue
 
         for game in data:
             try:
@@ -900,6 +919,9 @@ def main(args: argparse.Namespace) -> None:
     stats = compute_month_stats(log)
 
     matches = fetch_real_matches(SPORTS)
+    with_bm = sum(1 for m in matches if (m.get('bookmakers') or []))
+    print(f"Matches fetched: {len(matches)} | With bookmakers: {with_bm}")
+    append_debug_log(f"Matches fetched: {len(matches)} | With bookmakers: {with_bm}")
     today_str = local_now.date().isoformat()
 
     # Filter: today's matches only (local date)
@@ -921,8 +943,18 @@ def main(args: argparse.Namespace) -> None:
         available = sorted(todays_matches, key=lambda x: x.get("kickoff_dt") or (local_now + timedelta(days=365)))
 
     candidates = build_candidates(available)
+    print(f"Candidates built: {len(candidates)}")
+    append_debug_log(f"Candidates built: {len(candidates)}")
     if not candidates:
-        append_debug_log("No candidates built (no odds/markets). Exiting.")
+        # Fallback: consider next 48 hours of matches (local time) to avoid blank days
+        next_48h_cutoff = local_now + timedelta(hours=48)
+        next_48h = [m for m in matches if m.get('kickoff_dt') and m['kickoff_dt'] <= next_48h_cutoff]
+        append_debug_log(f"No candidates today; trying next 48h window: matches={len(next_48h)}")
+        candidates = build_candidates(next_48h)
+        print(f"Candidates built (next 48h): {len(candidates)}")
+        append_debug_log(f"Candidates built (next 48h): {len(candidates)}")
+    if not candidates:
+        append_debug_log("No candidates built even after 48h fallback. Exiting.")
         print("No candidates found.")
         return
 
