@@ -1,7 +1,7 @@
-# Betting Boyz — GitHub-safe runner
+# Betting Boyz — GitHub-safe runner (NO SECRETS IN FILE)
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 REQUIRED_VARS = [
     "TWILIO_ACCOUNT_SID",
@@ -17,8 +17,18 @@ if missing:
     print("Missing environment variables:", missing)
     sys.exit(1)
 
+# Import your main bot module (must be in repo root)
 import betting_boyz_real_final_verified_FULL_PATCHED as bot
 
-if __name__ == "__main__":
-    print("Betting Boyz Runner Started", datetime.utcnow())
-    bot.main(bot.argparse.Namespace(refresh_sports=False, self_test=False))
+if _name_ == "_main_":
+    # ✅ timezone-aware UTC (fixes utcnow deprecation warning)
+    print("Betting Boyz Runner Started", datetime.now(timezone.utc).isoformat())
+
+    # ✅ IMPORTANT: provide ALL args your bot expects, including "slot"
+    args = bot.argparse.Namespace(
+        refresh_sports=False,
+        self_test=False,
+        slot=None,  # auto: morning before cutoff, afternoon after cutoff
+    )
+
+    bot.main(args)
